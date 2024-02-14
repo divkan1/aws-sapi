@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:s3="http://www.mulesoft.org/schema/mule/s3"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/s3 http://www.mulesoft.org/schema/mule/s3/current/mule-s3.xsd">
+	<s3:config name="Amazon_S3_Configuration" doc:name="Amazon S3 Configuration" doc:id="cd9dcda6-ec6d-4aaa-8591-665a7e4bb6cb" >
+		<s3:connection accessKey="AKIATCKAM4I47RL4FFOT" secretKey="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" region="us-east-2" />
+	</s3:config>
+	<flow name="post:\document:application\json:aws-sapi-config">
+        <ee:transform doc:name="Set correlationId" doc:id="5bda0123-1a3e-461a-9374-bd4a077ba6f5" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+attributes.headers.'x-correlation-id' default payload.fileName
+
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Start Log" doc:id="b5032922-dfd2-4fcd-8895-04c3c84910d0" message='transactionID: #[vars.transactionId], correlationID: #[vars.correlationId], message: "Started update document to amazon s3 flow"'/>
+		<ee:transform doc:name="Decode Base 64 String To Document" doc:id="d9f9bc6d-8d4a-49ac-8975-77ce14a015b2" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+import fromBase64 from dw::core::Binaries
+output application/octet-stream
+---
+fromBase64(payload.document)]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="bucketName" ><![CDATA[%dw 2.0
+output application/java
+---
+payload.bucketName]]></ee:set-variable>
+				<ee:set-variable variableName="keyPath" ><![CDATA[%dw 2.0
+output application/java
+---
+payload.folderPath as String ++ "/" ++ payload.fileName as String]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<s3:put-object doc:name="Put Object" doc:id="b73e0f33-6fe0-4ac7-aaed-319cb01d35c3" config-ref="Amazon_S3_Configuration" bucketName="#[vars.bucketName]" key="#[vars.keyPath]"/>
+		<ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  code: 200,
+  message: "Success",
+  description: "Document uploaded successfully",
+  dateTime: now() as String {format: "yyyy-MM-dd'T'HH:mm:ss'Z'"},
+  transactionId: vars.transactionId
+} as Object {encoding: "UTF-8", mediaType: "application/json"}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+		<logger level="INFO" doc:name="End Log" doc:id="0b3a72aa-5b3f-43cf-9b01-3931abf31aef" message='transactionID: #[vars.transactionId], correlationID: #[vars.correlationId], message: "Completed update document to amazon s3 flow"'/>
+    
+</flow>
+	</mule>
